@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="250" viewBox="0 0 400 250">
+  <defs>
+    <style>
+      .mark { stroke:#222; stroke-width:12; stroke-linecap:round; fill:none; }
+      .text { fill:#222; font: 700 44px 'Montserrat, Arial, sans-serif'; letter-spacing:1px; }
+    </style>
+  </defs>
+
+  <!-- O + X -->
+  <g transform="translate(200,80)">
+    <circle r="50" class="mark"/>
+    <line x1="-30" y1="-30" x2="30" y2="30" class="mark"/>
+    <line x1="30" y1="-30" x2="-30" y2="30" class="mark"/>
+  </g>
+
+  <!-- Yazı -->
+  <text class="text" x="50%" y="170" text-anchor="middle">tengriLZ</text>
+</svg>

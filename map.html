@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <title>TengriLZ • LZ Adayları (Pro UX)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <style>
+    :root {
+      --bg: #0b1324;          /* daha koyu arka plan */
+      --panel: #0f172a;       /* panel zemin */
+      --muted: #243247;       /* çerçeve/ayraç */
+      --fg: #e5eefc;          /* metin */
+      --fg-dim: #a7b6cf;
+      --brand: #60a5fa;       /* mavi */
+      --accent: #22c55e;      /* yeşil */
+      --warn: #f97316;        /* turuncu */
+      --shadow: 0 8px 24px rgba(2,8,23,.45);
+      --radius: 14px;
+      --panelWidth: 360px;    /* ✨ desktop panel genişliği (drag ile değişir) */
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0; background: var(--bg); color: var(--fg);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+    .app {
+      height: 100%; display: grid; grid-template-columns: var(--panelWidth) 1fr; grid-template-rows: 56px 1fr;
+      grid-template-areas: "top top" "panel map";
+    }
+    .app.panel-collapsed { grid-template-columns: 0 1fr; }
+    .app.panel-collapsed .panel { padding: 0; border-right: none; overflow: hidden; }
+
+    .topbar {
+      grid-area: top; display: flex; align-items: center; gap: 12px; padding: 8px 14px; background: var(--panel);
+      border-bottom: 1px solid var(--muted); box-shadow: var(--shadow);
+    }
+    .topbar .brand {
+      display: inline-flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: .2px;
+    }
+    .topbar .brand .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 6px rgba(96,165,250,.15); }
+    .topbar .grow { flex: 1; }
+    .topbar .btn {
+      appearance: none; border: 1px solid var(--muted); background: transparent; color: var(--fg);
+      padding: 8px 10px; border-radius: 10px; cursor: pointer; transition: .2s; font-weight: 600;
+    }
+    .topbar .btn:hover { background: rgba(255,255,255,.06); }
+
+    .panel {
+      grid-area: panel; background: var(--panel); border-right: 1px solid var(--muted); overflow-y: auto;
+      padding: 14px; gap: 14px; display: grid; grid-auto-rows: min-content; box-shadow: var(--shadow);
+      position: relative;
+    }
+    .section { background: rgba(255,255,255,.02); border: 1px solid var(--muted); border-radius: var(--radius); padding: 12px; }
+    .section h3 { margin: 0 0 10px; font-size: 14px; letter-spacing: .25px; color: var(--fg-dim); font-weight: 700; text-transform: uppercase; }
+
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .field { display: grid; gap: 6px; }
+    .label { font-size: 12px; color: var(--fg-dim); }
+    input, select, button {
+      background: #0b1220; color: var(--fg); border: 1px solid var(--muted); border-radius: 10px; padding: 10px;
+      outline: none; transition: .2s;
+    }
+    input:focus, select:focus { border-color: var(--brand); box-shadow: 0 0 0 4px rgba(96,165,250,.12); }
+    .actions { display: flex; gap: 10px; }
+    .primary { background: linear-gradient(180deg,#3b82f6,#2563eb); border-color: #1d4ed8; font-weight: 700; }
+    .primary:hover { filter: brightness(1.04); }
+    .ghost { background: transparent; }
+
+    details { border-radius: 10px; overflow: hidden; }
+    summary { cursor: pointer; list-style: none; font-weight: 700; color: var(--fg); }
+    summary::marker, summary::-webkit-details-marker { display: none; }
+    summary .caret { display:inline-block; width: 10px; height: 10px; border-right:2px solid var(--fg-dim); border-bottom:2px solid var(--fg-dim); transform: rotate(-45deg); margin-right: 8px; transition: .2s; }
+    details[open] summary .caret { transform: rotate(45deg); }
+
+    .status { position: absolute; left: 16px; bottom: 16px; background: rgba(15,23,42,.9); border: 1px solid var(--muted);
+      padding: 8px 12px; border-radius: 10px; color: var(--fg); box-shadow: var(--shadow); font-size: 12px; z-index: 600; }
+    .status .ok { color: var(--accent); font-weight: 700; }
+    .status .err { color: #ef4444; font-weight: 700; }
+
+    #map { grid-area: map; height: 100%; }
+
+    /* Basemap segmented */
+    .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .seg input { display: none; }
+    .seg label { text-align: center; padding: 8px; border: 1px solid var(--muted); border-radius: 10px; cursor: pointer; font-weight: 600; color: var(--fg-dim); }
+    .seg input:checked + label { border-color: var(--brand); color: var(--fg); box-shadow: 0 0 0 4px rgba(96,165,250,.12); }
+
+    /* Rank ikonları */
+    .lz-rank {
+      background: rgba(239,68,68,.95);
+      color: #fff; border-radius: 999px;
+      width: 24px; height: 24px; display: grid; place-items: center;
+      font-weight: 800; border: 2px solid #fff;
+      box-shadow: 0 6px 14px rgba(0,0,0,.35);
+    }
+    .lz-rank.secondary { background: rgba(249,115,22,.95); }
+
+    /* Legend */
+    .legend {
+      position: absolute; right: 16px; bottom: 16px; z-index: 550;
+      background: rgba(15,23,42,.95); border: 1px solid var(--muted);
+      padding: 8px 10px; border-radius: 10px; font-size: 12px; color: var(--fg);
+    }
+    .legend .item { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+    .legend .swatch { width: 16px; height: 10px; border-radius: 4px; }
+    .legend .swatch.best { background: #ef4444; }
+    .legend .swatch.candidate { background: #f97316; }
+    .legend .swatch.clear { background: #22c55e; }
+
+    /* Responsive: küçük ekranlarda panel overlay olarak aç/kapa */
+    @media (max-width: 1000px) {
+      .app { grid-template-columns: 1fr; grid-template-rows: 56px 1fr; grid-template-areas: "top" "map"; }
+      .panel { position: absolute; inset: 56px 0 auto 0; height: 60vh; border-right: none; border-bottom: 1px solid var(--muted);
+        transform: translateY(-110%); transition: transform .25s ease; z-index: 1000; }
+      .panel.open { transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <span class="brand"><span class="dot"></span> TengriLZ • LZ Adayları</span>
+      <div class="grow"></div>
+      <button class="btn" id="togglePanel" title="Paneli aç/kapat">Panel</button>
+      <button class="btn" id="clearBtn" title="Haritadaki çizimleri temizle">Temizle</button>
+      <button class="btn" id="downloadBtn" title="Son sonucu GeoJSON olarak indir">İndir</button>
+    </div>
+
+    <aside class="panel" id="panel">
+      <div class="section">
+        <h3>Bağlantı</h3>
+        <div class="field">
+          <span class="label">API Adresi</span>
+          <input id="base" placeholder="http://127.0.0.1:8000" value="http://127.0.0.1:8000" />
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>Taban Harita</h3>
+        <div class="seg">
+          <input type="radio" name="bm" id="bm-osm" value="osm">
+          <label for="bm-osm">OSM</label>
+          <input type="radio" name="bm" id="bm-topo" value="opentopo" checked>
+          <label for="bm-topo">Topo</label>
+          <input type="radio" name="bm" id="bm-esri" value="esri">
+          <label for="bm-esri">Uydu</label>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>Konum</h3>
+        <div class="row">
+          <div class="field">
+            <span class="label">Merkez Enlem (lat)</span>
+            <input id="lat" type="number" step="0.000001" value="37.7119" />
+          </div>
+          <div class="field">
+            <span class="label">Merkez Boylam (lon)</span>
+            <input id="lon" type="number" step="0.000001" value="36.4902" />
+          </div>
+        </div>
+        <div class="actions" style="margin-top:10px">
+          <button id="useCenter" class="btn">Use Map Center</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>Analiz</h3>
+        <div class="row">
+          <div class="field">
+            <span class="label">Pencere Yarıçapı (m)</span>
+            <input id="window" type="number" step="50" value="800" />
+          </div>
+          <div class="field">
+            <span class="label">Eğim Eşiği (°)</span>
+            <input id="slope" type="number" step="0.5" value="12" />
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <span class="label">Min. İniş Çapı (m)</span>
+            <input id="diam" type="number" step="1" value="30" />
+          </div>
+          <div class="field">
+            <span class="label">Morfoloji</span>
+            <select id="morph">
+              <option value="closing">closing (birleştir)</option>
+              <option value="opening" selected>opening (parçala)</option>
+            </select>
+          </div>
+        </div>
+        <div class="actions" style="margin-top:10px">
+          <button id="run" class="primary">Adayları Getir</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>Top-10 LZ</h3>
+        <div style="font-size:12px;color:var(--fg-dim);margin-bottom:6px">Listeden tıklayınca haritada ilgili LZ’ye zoom yapılır.</div>
+        <ol id="bestList" style="margin:0 0 6px 18px; padding:0; display:grid; gap:6px;"></ol>
+        <div class="actions">
+          <button id="zoomBest" class="btn">#1’e Zoom</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>Tarama (Gelişmiş)</h3>
+        <details>
+          <summary><span class="caret"></span>Aç/Kapat</summary>
+          <div class="row" style="margin-top:10px">
+            <div class="field">
+              <span class="label">Scan Yarıçapı (km)</span>
+              <input id="scanRadiusKm" type="number" step="0.5" value="2" />
+            </div>
+            <div class="field">
+              <span class="label">Grid Adımı (m)</span>
+              <input id="scanStepM" type="number" step="50" value="400" />
+            </div>
+          </div>
+          <div class="actions" style="margin-top:10px">
+            <button id="scan" class="btn">Scan Grid</button>
+          </div>
+        </details>
+      </div>
+
+      <!-- drag resizer (opsiyonel) -->
+      <div class="panel-resizer" id="panelResizer" title="Sürükleyerek panel genişliğini değiştir"></div>
+    </aside>
+
+    <div id="map"></div>
+  </div>
+
+  <div class="legend">
+    <div class="item"><span class="swatch best"></span> En iyi LZ (kalın kırmızı + numara)</div>
+    <div class="item"><span class="swatch candidate"></span> Aday merkezler (turuncu)</div>
+    <div class="item"><span class="swatch clear"></span> Temiz alan poligonları (yeşil)</div>
+  </div>
+
+  <div class="status" id="status">hazır</div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script>
+    // --- Leaflet init ---
+    const map = L.map('map', { zoomControl: true }).setView([37.7119, 36.4902], 11);
+    const layers = {
+      osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }),
+      opentopo: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17, attribution: '&copy; OpenTopoMap' }),
+      esri: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: '&copy; Esri' }),
+    };
+    layers.opentopo.addTo(map);
+
+    // Basemap segmented control
+    const bmRadios = document.querySelectorAll('[name="bm"]');
+    bmRadios.forEach(r => r.addEventListener('change', () => {
+      Object.values(layers).forEach(l => map.removeLayer(l));
+      layers[document.querySelector('[name="bm"]:checked').value].addTo(map);
+    }));
+
+    const appEl = document.querySelector('.app');
+    const panel = document.getElementById('panel');
+    const statusEl = document.getElementById('status');
+    const drawn = L.featureGroup().addTo(map);
+    let lastGeoJSON = null;
+
+    function stylePoly() { return { color: '#22c55e', weight: 2, fillColor: '#22c55e', fillOpacity: 0.25 }; }
+    function styleCenter(thick=false) { return { color: thick ? '#ef4444' : '#f97316', weight: thick ? 3 : 2, fillColor: '#f97316', fillOpacity: 0.12 }; }
+
+    const LABELS = {
+      id: 'ID',
+      clear_radius_m: 'Temiz yarıçap (m)',
+      clear_diameter_m: 'Temiz çap (m)',
+      window_m: 'Pencere (m)',
+      rank: 'Sıra',
+      bbox_diameter_m: 'BBox çapı (m)',
+      min_clear_diameter_m: 'Min iniş çap eşiği (m)',
+      slope_max_deg: 'Eğim eşiği (°)',
+      morph: 'Morfoloji',
+    };
+    function labelize(k){ return LABELS[k] || k; }
+
+    function toPopupProps(props) {
+      const pairs = Object.entries(props || {});
+      return '<div style="font:12px/1.35 ui-sans-serif; max-width:260px;">' +
+        pairs.map(([k,v]) => `<div><span style="display:inline-block;padding:2px 8px;border-radius:999px;background:#0ea5e9;color:#042;font-weight:700;margin-right:6px">${labelize(k)}</span>${typeof v === 'number' ? Number(v).toFixed(2) : v}</div>`).join('') +
+        '</div>';
+    }
+
+    // Kısayol seçici
+    function $(id){ return document.getElementById(id.replace(/^#/,'')); }
+
+    // Panel toggle (desktop + mobil)
+    document.getElementById('togglePanel').addEventListener('click', () => {
+      if (window.matchMedia('(max-width: 1000px)').matches) {
+        panel.classList.toggle('open');
+      } else {
+        appEl.classList.toggle('panel-collapsed');
+      }
+    });
+
+    // Konum: haritaya tıklayınca inputları doldur
+    let clickMarker = null;
+    map.on('click', (ev) => {
+      const { lat, lng } = ev.latlng;
+      $('#lat').value = lat.toFixed(6);
+      $('#lon').value = lng.toFixed(6);
+      if (clickMarker) drawn.removeLayer(clickMarker);
+      clickMarker = L.circleMarker([lat, lng], { radius: 6, color: '#60a5fa' }).addTo(drawn);
+      statusEl.textContent = `Seçili merkez: ${lat.toFixed(5)}, ${lng.toFixed(5)} (Panel → Adayları Getir)`;
+    });
+
+    document.getElementById('useCenter').addEventListener('click', () => {
+      const c = map.getCenter();
+      $('#lat').value = c.lat.toFixed(6);
+      $('#lon').value = c.lng.toFixed(6);
+    });
+
+    // API çağrısı
+    async function fetchCandidates(lat, lon, window_m, slope_max_deg, min_diameter_m, morph) {
+      const base = $('#base').value.trim().replace(/\/$/, '');
+      const url = `${base}/candidates?lat=${lat}&lon=${lon}&window_m=${window_m}&slope_max_deg=${slope_max_deg}&min_diameter_m=${min_diameter_m}&morph=${morph}`;
+      const r = await fetch(url, { headers: { accept: 'application/json' }});
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      return r.json();
+    }
+
+    // Rank ikonları ve liste
+    function makeRankIcon(n, secondary=false) {
+      return L.divIcon({ className: 'lz-rank' + (secondary ? ' secondary' : ''), html: String(n), iconSize: [24,24], iconAnchor: [12,12] });
+    }
+    function writeBestList(arr) {
+      const list = $('#bestList');
+      list.innerHTML = '';
+      arr.forEach((p, i) => {
+        const li = document.createElement('li');
+        li.style.cursor = 'pointer';
+        li.innerHTML = `<strong>#${i+1}</strong> • ${Math.round(p.radius)} m • ${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`;
+        li.addEventListener('click', () => { map.setView([p.lat, p.lon], 15); });
+        list.appendChild(li);
+      });
+    }
+
+    // Tek analiz
+    $('#run').addEventListener('click', async () => {
+      const lat = Number($('#lat').value);
+      const lon = Number($('#lon').value);
+      const window_m = Number($('#window').value);
+      const slope_max_deg = Number($('#slope').value);
+      const min_diameter_m = Number($('#diam').value);
+      const morph = $('#morph').value;
+
+      statusEl.textContent = 'Yükleniyor...';
+      try {
+        const gj = await fetchCandidates(lat, lon, window_m, slope_max_deg, min_diameter_m, morph);
+        lastGeoJSON = gj; drawn.clearLayers();
+        const bounds = [];
+        const centers = [];
+
+        (gj.features || []).forEach(f => {
+          if (f.geometry?.type === 'Polygon' || f.geometry?.type === 'MultiPolygon') {
+            const layer = L.geoJSON(f, { style: stylePoly() }).addTo(drawn);
+            layer.bindPopup(toPopupProps(f.properties || {}));
+            try { bounds.push(layer.getBounds()); } catch {}
+          } else if (f.geometry?.type === 'Point' && String(f.properties?.id || '').startsWith('LZ-CENTER')) {
+            const [lng, lt] = f.geometry.coordinates;
+            const radius = Number(f.properties?.clear_radius_m || 0);
+            centers.push({ lat: lt, lon: lng, radius, props: f.properties });
+          }
+        });
+
+        centers.sort((a,b) => b.radius - a.radius);
+        const top = centers.slice(0, 10);
+
+        // tüm aday merkezler (turuncu-ince)
+        centers.forEach(p => {
+          const c = L.circle([p.lat, p.lon], { radius: p.radius, ...styleCenter(false) }).addTo(drawn);
+          c.bindPopup(toPopupProps(p.props));
+          bounds.push(c.getBounds());
+        });
+        // top-10 (kalın kırmızı + numara)
+        top.forEach((p, idx) => {
+          const c = L.circle([p.lat, p.lon], { radius: p.radius, ...styleCenter(true) }).addTo(drawn);
+          c.bindPopup(toPopupProps({ ...p.props, rank: idx + 1 }));
+          const m = L.marker([p.lat, p.lon], { icon: makeRankIcon(idx + 1, idx > 0) }).addTo(drawn);
+          m.bindPopup(toPopupProps({ ...p.props, rank: idx + 1 }));
+        });
+
+        writeBestList(top);
+        document.getElementById('zoomBest').onclick = () => { if (top.length) map.setView([top[0].lat, top[0].lon], 15); };
+
+        if (bounds.length) {
+          const b = bounds.reduce((acc, bb) => acc ? acc.extend(bb) : bb, null);
+          if (b) map.fitBounds(b.pad(0.25));
+        } else {
+          map.setView([lat, lon], 13);
+        }
+        statusEl.innerHTML = `<span class="ok">OK</span> • özellik: ${gj.features?.length ?? 0} | mod=${gj.meta?.morph} | eğim=${gj.meta?.slope_max_deg}°`;
+      } catch (e) {
+        statusEl.innerHTML = `<span class="err">Hata:</span> ${e.message}`;
+      }
+    });
+
+    // Grid tarama
+    $('#scan').addEventListener('click', async () => {
+      const centerLat = Number($('#lat').value);
+      const centerLon = Number($('#lon').value);
+      const window_m = Number($('#window').value);
+      const slope_max_deg = Number($('#slope').value);
+      const min_diameter_m = Number($('#diam').value);
+      const morph = $('#morph').value;
+      const radiusKm = Number($('#scanRadiusKm').value);
+      const stepM = Number($('#scanStepM').value);
+
+      // metre -> derece yaklaşık
+      const mPerDegLat = 111320.0;
+      const mPerDegLon = 111320.0 * Math.cos(centerLat * Math.PI/180);
+      const stepDegLat = stepM / mPerDegLat;
+      const stepDegLon = stepM / mPerDegLon;
+      const maxDegLat = (radiusKm * 1000) / mPerDegLat;
+      const maxDegLon = (radiusKm * 1000) / mPerDegLon;
+
+      const points = [];
+      for (let dLat = -maxDegLat; dLat <= maxDegLat + 1e-9; dLat += stepDegLat) {
+        for (let dLon = -maxDegLon; dLon <= maxDegLon + 1e-9; dLon += stepDegLon) {
+          points.push([centerLat + dLat, centerLon + dLon]);
+        }
+      }
+      if (points.length > 80) { statusEl.innerHTML = `<span class=err>Grid çok yoğun (${points.length}). Step'i büyüt ya da radius'u küçült.</span>`; return; }
+
+      drawn.clearLayers();
+      let allCenters = [];
+      for (let i = 0; i < points.length; i++) {
+        const [lat, lon] = points[i];
+        statusEl.textContent = `Tarama ${i+1}/${points.length} ...`;
+        try {
+          const gj = await fetchCandidates(lat, lon, window_m, slope_max_deg, min_diameter_m, morph);
+          lastGeoJSON = gj; // son başarılı yanıtı sakla
+          (gj.features || []).forEach(f => {
+            if (f.geometry?.type === 'Point' && String(f.properties?.id || '').startsWith('LZ-CENTER')) {
+              const [lng, lt] = f.geometry.coordinates;
+              const radius = Number(f.properties?.clear_radius_m || 0);
+              allCenters.push({ lat: lt, lon: lng, radius, props: f.properties });
+            }
+          });
+        } catch { /* bazı pencereler boş olabilir */ }
+      }
+
+      allCenters.sort((a,b) => b.radius - a.radius);
+      const top = allCenters.slice(0, 10);
+
+      const bounds = [];
+      allCenters.forEach(p => { const c = L.circle([p.lat, p.lon], { radius: p.radius, ...styleCenter(false) }).addTo(drawn); c.bindPopup(toPopupProps(p.props)); bounds.push(c.getBounds()); });
+      top.forEach((p, idx) => {
+        const c = L.circle([p.lat, p.lon], { radius: p.radius, ...styleCenter(true) }).addTo(drawn);
+        c.bindPopup(toPopupProps({ ...p.props, rank: idx + 1 }));
+        const m = L.marker([p.lat, p.lon], { icon: makeRankIcon(idx + 1, idx > 0) }).addTo(drawn);
+        m.bindPopup(toPopupProps({ ...p.props, rank: idx + 1 }));
+      });
+      if (bounds.length) { const b = bounds.reduce((acc, bb) => acc ? acc.extend(bb) : bb, null); if (b) map.fitBounds(b.pad(0.25)); }
+
+      writeBestList(top);
+      document.getElementById('zoomBest').onclick = () => { if (top.length) map.setView([top[0].lat, top[0].lon], 15); };
+
+      statusEl.innerHTML = `<span class="ok">Scan OK</span> • merkez sayısı: ${allCenters.length}, top10 çizildi.`;
+    });
+
+    // Temizle & İndir
+    document.getElementById('clearBtn').addEventListener('click', () => { drawn.clearLayers(); statusEl.textContent = 'Temizlendi'; });
+    document.getElementById('downloadBtn').addEventListener('click', () => {
+      if (!lastGeoJSON) { statusEl.innerHTML = '<span class="err">İndirilecek veri yok</span>'; return; }
+      const blob = new Blob([JSON.stringify(lastGeoJSON, null, 2)], { type: 'application/geo+json' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'lz_candidates.geojson'; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    });
+
+    // Panel genişliği: drag resizer (opsiyonel)
+    (function enablePanelResize(){
+      const resizer = document.getElementById('panelResizer');
+      if (!resizer) return;
+      let dragging = false;
+      const minW = 260, maxW = 600;
+      const onMove = (e) => {
+        if (!dragging) return;
+        const appRect = document.querySelector('.app').getBoundingClientRect();
+        const x = (e.touches ? e.touches[0].clientX : e.clientX);
+        let newW = x - appRect.left;
+        newW = Math.max(minW, Math.min(maxW, newW));
+        document.documentElement.style.setProperty('--panelWidth', `${newW}px`);
+      };
+      const stop = () => { dragging = false; document.body.style.userSelect = ''; window.removeEventListener('mousemove', onMove); window.removeEventListener('touchmove', onMove); };
+      resizer.addEventListener('mousedown', ()=>{ dragging = true; document.body.style.userSelect = 'none'; window.addEventListener('mousemove', onMove); });
+      resizer.addEventListener('touchstart', ()=>{ dragging = true; document.body.style.userSelect = 'none'; window.addEventListener('touchmove', onMove); }, {passive:true});
+      window.addEventListener('mouseup', stop);
+      window.addEventListener('touchend', stop);
+    })();
+
+    // İlk yüklemede tek analiz
+    document.getElementById('run').click();
+  </script>
+</body>
+</html>
+
