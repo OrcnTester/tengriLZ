@@ -176,7 +176,9 @@ We filter landing candidates by aircraft specs.
    uvicorn api.main:app --reload
 4. Tarayıcıda haritayı aç:
    python -m http.server -d frontend 8081
-   # http://localhost:8081
+   #### http://localhost:8081
+5. Test için: python -m pytest
+
 
 ### EN
 1. Place data/dem.tif (GeoTIFF DEM from OpenTopography/NASADEM).
@@ -187,19 +189,20 @@ We filter landing candidates by aircraft specs.
    uvicorn api.main:app --reload
 4. Serve map UI:
    python -m http.server -d frontend 8081
-   # http://localhost:8081
+   #### http://localhost:8081
+5. For test: python -m pytest
 
 ---
 
-##🌍 İsim / Name
+## 🌍 İsim / Name
 
-###TengriLZ
+### TengriLZ
 - TR: "Gökyüzünden Güvenli Zemine"
 - EN: "From Sky to Safe Ground"
 
 ---
 
-###⚠️ Notlar / Notes
+### ⚠️ Notlar / Notes
 - TR: Bu proje bir araştırma prototipidir, gerçek operasyonlarda yalnızca yardımcı sistemi olarak düşünülebilir. Nihai karar pilotta olmalıdır.
 - EN: This is a research prototype. For real misions, TengriLZ should only be considered an advisory system; the final decision must remain with the pilot.
 

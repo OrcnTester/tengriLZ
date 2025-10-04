@@ -6,3 +6,8 @@ shapely
 scipy
 fastapi
 uvicorn
+pydantic
+scikit-image
+pyproj
+geojson
+pytest

@@ -25,6 +25,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from .m2 import router as m2_router
+app.include_router(m2_router)
+
+
 @app.get("/", include_in_schema=False)
 def root():
     return RedirectResponse(url="/docs")
@@ -71,7 +75,7 @@ def candidates(
         min_clear_diameter_m = ac["min_clear_diameter_m"]
 
         # --- M0 pipeline: mevcut fonksiyona pasla (yalnızca eşikleri güncellenmiş değerlerle) ---
-        from lz_candidates import main as lz_main  # scripts/lz_candidates.py
+        from scripts.lz_candidates import main as lz_main  # scripts/lz_candidates.py
 
         result = lz_main(
             str(dem_path),
