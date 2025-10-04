@@ -128,8 +128,8 @@ We filter flat terrain patches directly from DEM slope analysis.
 ---
 
 ### M1
-- [ ] Helikopter parametreleri (rotor çapı, min açıklık, slope limiti)  
-- [ ] Candidate filtering by aircraft specs  
+- [x] Helikopter parametreleri (rotor çapı, min açıklık, slope limiti)  
+- [x] Candidate filtering by aircraft specs  
 
 #### Aircraft-Aware Candidates
 We filter landing candidates by aircraft specs.
