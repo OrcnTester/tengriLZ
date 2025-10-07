@@ -4,17 +4,21 @@ from pydantic import BaseModel, Field
 from typing import List, Literal, Optional, Tuple
 from pathlib import Path
 import tempfile, os
-
 import rasterio
 from rasterio.windows import from_bounds
-
 from rasterio.errors import RasterioIOError
-
 from shapely.geometry import LineString
 from pyproj import Transformer
-
 from core.raster import compute_obstacles
 from core.clearance import clearance_along_route
+import shapely 
+from shapely.geometry import shape
+from shapely.geometry import mapping
+from shapely import ops as shp_ops
+
+
+
+
 
 # --- rasterio round_window fallback (bazı sürümlerde yok) ---
 try:
@@ -90,6 +94,34 @@ class ClearanceParams(BaseModel):
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _transform_fc(fc: dict, src_epsg: int, out_crs: Optional[str]):
+    """
+    FeatureCollection'ı src_epsg -> out_crs (örn. 'EPSG:4326') dönüştürür.
+    out_crs None ise dokunmaz.
+    """
+    if not out_crs:
+        return fc
+    oc = str(out_crs).upper()
+    if oc in ("", f"EPSG:{src_epsg}"):
+        return fc
+
+    t = Transformer.from_crs(f"EPSG:{src_epsg}", oc, always_xy=True)
+
+    def _xy(x, y, z=None):
+        X, Y = t.transform(x, y)
+        return (X, Y) if z is None else (X, Y, z)
+
+    out_feats = []
+    for f in fc.get("features", []):
+        geom = shape(f["geometry"])
+        geom_t = shp_ops.transform(lambda x, y, z=None: _xy(x, y, z), geom)
+        nf = dict(f)
+        nf["geometry"] = mapping(geom_t)
+        out_feats.append(nf)
+    return {"type": "FeatureCollection", "features": out_feats}
+
+
+
 def _subset_raster(src_path: str, bounds, dst_path: str):
     if not Path(src_path).exists():
         raise HTTPException(404, f"Raster not found: {src_path}")
@@ -137,7 +169,6 @@ def _wgs84_to_raster_xy(lon: float, lat: float, raster_path: str):
 # ─────────────────────────────────────────────────────────────────────────────
 # Health / Tools
 # ─────────────────────────────────────────────────────────────────────────────
-
 @router.get("/m2/ping")
 def ping():
     return {"ok": True}
@@ -182,11 +213,6 @@ def files(
         "dsm_path": dsm_path, "dsm_exists": Path(dsm_path).exists(),
         "dtm_path": dtm_path, "dtm_exists": (Path(dtm_path).exists() if dtm_path else None),
     }
-
-@router.get("/m2/convert/wgs2utm")
-def wgs2utm(lon: float, lat: float):
-    x, y, epsg, zone = _wgs84_to_raster_xy(lon, lat)
-    return {"lon": lon, "lat": lat, "x": round(x, 3), "y": round(y, 3), "epsg": epsg, "zone": f"{zone}N"}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -236,6 +262,7 @@ def get_obstacles_aoi(
     dtm_path: Optional[str] = Query("data/DTM_utm.tif"),
     min_h: float = 2.0,
     smooth_sigma: float = 1.0,
+    out_crs: Optional[str] = Query(None),   # +++ EKLENDİ +++
 ):
     try:
         cx, cy, _ = _wgs84_to_raster_xy(lon, lat, dsm_path)
@@ -252,7 +279,14 @@ def get_obstacles_aoi(
                 _subset_raster(dtm_path, bounds, dtm_sub)
 
             feats = compute_obstacles(dsm_sub, dtm_sub, min_h=min_h, smooth_sigma=smooth_sigma)
-            return JSONResponse({"type": "FeatureCollection", "features": feats})
+            fc = {"type": "FeatureCollection", "features": feats}
+
+            if out_crs:
+                with rasterio.open(dsm_sub) as ds:
+                    src_epsg = ds.crs.to_epsg()
+                fc = _transform_fc(fc, src_epsg, out_crs)
+
+            return JSONResponse(fc)
     except HTTPException:
         raise
     except RasterioIOError as e:
@@ -305,6 +339,7 @@ def post_clearance(
                 dtm_path=dtm_sub if dtm_sub else None,
                 dsm_path=dsm_sub,
             )
+          
             return JSONResponse({"segments": segs_fc, "hotspots": hotspots_fc, "summary": summary})
     except RasterioIOError as e:
         raise HTTPException(400, f"Raster read error: {e}")
@@ -328,6 +363,7 @@ def clearance_aoi(
     dsm_path: str = Query("data/DSM_utm.tif"),
     dtm_path: Optional[str] = Query("data/DTM_utm.tif"),
     min_h: float = 2.0,
+    out_crs: Optional[str] = Query(None), 
 ):
     try:
         x0, y0, _ = _wgs84_to_raster_xy(lon0, lat0, dsm_path)
@@ -361,7 +397,15 @@ def clearance_aoi(
                 step_m=params.step_m,
                 dtm_path=dtm_sub if dtm_sub else None,
                 dsm_path=dsm_sub,
-            )
+            )  
+          
+            
+            if out_crs:
+                with rasterio.open(dsm_sub) as ds:
+                    src_epsg = ds.crs.to_epsg()
+                segs_fc = _transform_fc(segs_fc, src_epsg, out_crs)
+                hotspots_fc = _transform_fc(hotspots_fc, src_epsg, out_crs)
+            
             return JSONResponse({"segments": segs_fc, "hotspots": hotspots_fc, "summary": summary})
     except HTTPException:
         raise
