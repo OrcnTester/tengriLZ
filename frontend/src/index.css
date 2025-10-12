@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0b1324;
+  --panel: hsl(222, 47%, 11%);
+  --muted: #243247;
+  --fg: #e5eefc;
+  --fg-dim: #a7b6cf;
+  --brand: #60a5fa;
+  --accent: #22c55e;
+  --warn: #f97316;
+  --shadow: 0 8px 24px rgba(2, 8, 23, .45);
+  --radius: 14px;
+  --panelWidth: 450px;
+}
+
+* { 
+  box-sizing: border-box;
+}
+
+html, body { 
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+#root {
+  height: 100%;
+}
+
+/* Panel collapse styles */
+.panel-collapsed {
+  grid-template-columns: 0 1fr !important;
+}
+
+.panel-collapsed .panel {
+  padding: 0 !important;
+  border-right: none !important;
+  overflow: hidden !important;
+}
+
+/* Mobile responsive */
+@media (max-width: 1000px) {
+  .app {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: 56px 1fr !important;
+    grid-template-areas: "top" "map" !important;
+  }
+  
+  .panel {
+    position: absolute !important;
+    inset: 56px 0 auto 0 !important;
+    height: 60vh !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--muted) !important;
+    transform: translateY(-110%) !important;
+    transition: transform 0.25s ease !important;
+    z-index: 1000 !important;
+  }
+  
+  .panel.open {
+    transform: translateY(0) !important;
+  }
+  
+  .panel-collapsed {
+    grid-template-columns: 1fr !important;
+  }
+}
